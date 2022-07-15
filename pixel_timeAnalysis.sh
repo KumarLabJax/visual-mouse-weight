@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#SBATCH --job-name=pixel_analysis
+#SBATCH --job-name=time_analysis
 #SBATCH --time=6:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
@@ -36,8 +36,7 @@ then
                 module load singularity
 
                 # Actual inference call
-                singularity exec --nv "/projects/kumar-lab/guzmam/kaylabatch_rep/environment/UPennInferImg.simg" /bin/bash -c "python3 /projects/kumar-lab/PipelineEnvironment/Tracking/ellipse-fit-tracking/main.py --net_type segellreg --batch_size 1 Infer --model construct_segellreg_v8 --network_to_restore /projects/kumar-lab/dixonk_bh001_transfer/model/model.ckpt-234000 --input_movie ${FULL_VIDEO_FILE} --seg_movie_output --ellfit_output"
-                singularity exec --nv "/projects/kumar-lab/guzmam/kaylabatch_rep/environment/UPennInferImg.simg" /bin/bash -c "python3 /projects/kumar-lab/guzmam/kaylabatch_rep/code/pixel_analysis.py ${FULL_VIDEO_FILE} ${FULL_VIDEO_FILE%.*}_ellfit.npz ${FULL_VIDEO_FILE%.*}_seg.avi"
+                singularity exec --nv "/projects/kumar-lab/guzmam/kaylabatch_rep/environment/UPennInferImg.simg" /bin/bash -c "python3 /projects/kumar-lab/guzmam/kaylabatch_rep/code/timeAnalysis.py ${FULL_VIDEO_FILE%.*}_seg.avi"
 
                 echo "FINISHED PROCESSING VIDEO FILE: ${FULL_VIDEO_FILE}"
             else

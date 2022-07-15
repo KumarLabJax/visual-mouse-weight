@@ -189,7 +189,7 @@ class SegVideoAnalysis:
         reader = imageio.get_reader(filename)
         for frame_num, frame in enumerate(reader):
             pixel_count = np.sum(frame >= 127)
-            pixel_count = pixel_count/3
+            pixel_count = pixel_count/3  #why divide by 3?
             self.pixel_counts.append(pixel_count)
             self.total_pixel_counts = self.total_pixel_counts + pixel_count
         self.num_of_frames = len(self.pixel_counts)

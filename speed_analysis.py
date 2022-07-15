@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
 """
-Created on Thurs Feb 3 09:46:44 2022
+Created 6/28/2022
 
-@author: dixonk
+@author: Malachy Guzman
 """
 
 import ReadNPYAppend as r
@@ -12,8 +12,6 @@ import math as m
 import imageio
 import sys
 import csv
-#import matplotlib.pyplot as plt
-import sys
 
 class EllfitVideoAnlaysis:
     
@@ -194,33 +192,35 @@ class SegVideoAnalysis:
 
 def main():
         filename = sys.argv[1]
-        
+        print("Loaded " + filename)
+
         eva = EllfitVideoAnlaysis()
-
         eva.extract_ellipse_data(sys.argv[2])
-        eva.calc_avg_pixel_count()
-        eva.calc_median_pixel_count()
-        eva.calc_avg_median_pixel_count()
+        print("Done extracting ellipse-fit data")
 
-        sva = SegVideoAnalysis()
+        # Gradient function. data[0] is time series of x position, [1] is y pos time series. 
+        # Calculates using indices as implicit time steps. 2nd arg is polyn. order for estimation (sort of?)
+        x_pos = np.array(eva.data[:,0], dtype=float)
+        y_pos = np.array(eva.data[:,1], dtype=float)
 
-        sva.extract_segmentation_data(sys.argv[3])
-        sva.calc_avg_pixel_count()
-        sva.calc_median_pixel_count()
+        x_grad = np.gradient(x_pos, 1)
+        y_grad = np.gradient(y_pos, 1)
 
-        header = [filename]
-        rows = [str(eva.get_avg_pixel_count()), str(eva.get_median_pixel_count()), 
-                str(eva.get_avg_median_pixel_count()), str(sva.get_avg_pixel_count()),
-                str(sva.get_median_pixel_count())]
+        print("Done calculating gradients")
 
-        csvfilename = filename + ".csv"
+        # CSV creation 
+        header = ["v_x", "v_y", "v_mag"]
+        rows = [[],[],[]]
+ 
+        for i in range(len(x_grad)):   
+           rows.append([x_grad[i], y_grad[i], np.linalg.norm([x_grad[i], y_grad[i]])])
 
+        csvfilename = filename + "_velocity.csv"
         with open(csvfilename, 'w') as csvfile:
             writer = csv.writer(csvfile)
             writer.writerow(header)
-            for r in rows:
-                writer.writerow([r])
-        
+            writer.writerows(rows)
+
 
 if __name__ == "__main__":
     main()

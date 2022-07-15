@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#SBATCH --job-name=pixel_analysis
+#SBATCH --job-name=master_pixel_analysis
 #SBATCH --time=6:00:00
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=4
@@ -35,9 +35,8 @@ then
 
                 module load singularity
 
-                # Actual inference call
-                singularity exec --nv "/projects/kumar-lab/guzmam/kaylabatch_rep/environment/UPennInferImg.simg" /bin/bash -c "python3 /projects/kumar-lab/PipelineEnvironment/Tracking/ellipse-fit-tracking/main.py --net_type segellreg --batch_size 1 Infer --model construct_segellreg_v8 --network_to_restore /projects/kumar-lab/dixonk_bh001_transfer/model/model.ckpt-234000 --input_movie ${FULL_VIDEO_FILE} --seg_movie_output --ellfit_output"
-                singularity exec --nv "/projects/kumar-lab/guzmam/kaylabatch_rep/environment/UPennInferImg.simg" /bin/bash -c "python3 /projects/kumar-lab/guzmam/kaylabatch_rep/code/pixel_analysis.py ${FULL_VIDEO_FILE} ${FULL_VIDEO_FILE%.*}_ellfit.npz ${FULL_VIDEO_FILE%.*}_seg.avi"
+                # Inference call removed here, this file assumes existence of ellipse and seg vids
+                singularity exec --nv "/projects/kumar-lab/guzmam/environment/UPennInferImg.simg" /bin/bash -c "python3 /projects/kumar-lab/guzmam/fullSurvey/code/master_pixel_analysis.py ${FULL_VIDEO_FILE} ${FULL_VIDEO_FILE%.*}_ellfit.npz ${FULL_VIDEO_FILE%.*}_seg.avi"
 
                 echo "FINISHED PROCESSING VIDEO FILE: ${FULL_VIDEO_FILE}"
             else
@@ -61,7 +60,7 @@ else
         # Here we perform a self-submit
         sbatch --export=ROOT_DIR="$(dirname "${0}")",VIDEO_BATCH="${1}" --array="1-${video_count}%24" "${0}"
     else
-        echo "ERROR: you need to provide a batch file to process. Eg: ./PixelAnalysis.sh batchfile.txt" >&2
+        echo "ERROR: you need to provide a batch file to process. Eg: ./LargePixelAnalysis.sh videos/batchfile.txt" >&2
         exit 1
     fi
 fi
