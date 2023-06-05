@@ -9,7 +9,6 @@ This code compares the output of moment_analysis.py to find average and median l
 for each metric across sample videos.
 """
 
-from doctest import testmod
 import ReadNPYAppend as r
 import numpy as np
 import pandas as pd
