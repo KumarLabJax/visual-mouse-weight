@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 
 """
-Created 7/5/2022
-Last updated 6/2/2023
+@author: Malachy Guzman, Kayla Dixon
 
-@author: Malachy Guzman
+This code extracts segmentation and ellipse-fit data and computes the various metrics used for prediction. 
+The two classes "EllfitVideoAnlaysis" and "SegVideoAnalysis" were copied or adapted from Kayla Dixon's code. 
 
-Ellipse and segmentation data extraction adapted from Kayla Dixon's pixel_analysis.
-Code for theta, aspect ratio, circularity, rectangularity, eccentricity, and elongation 
-adapted from Brian Geuther's MouseSleep code.
+Returns .csv file of metric values for each frame of a given video, so each video gets its own .csv.
+For a large batch of videos, this file should be run through MasterPixelAnalysis.sh.
+
+IMPORTANT: Filepaths may need to be edited to work for external users.
 """
 
 import ReadNPYAppend as r
@@ -155,7 +156,6 @@ class SegVideoAnalysis:
 
 
 
-
 def main(): 
         filename = sys.argv[1]
         print("Loaded " + filename)
@@ -183,7 +183,6 @@ def main():
         print("Done calculating gradients")
 
         # Getting the rest of the fields for csv. Theta through elongation code below taken from Brian Geuther's MouseSleep code (2021)
-        # Theta, circularity, rectangularity commented out per results of experiment 2.3.1
         moment_df['x_mom'] = moment_df['m10']/moment_df['m00']
         moment_df['y_mom'] = moment_df['m01']/moment_df['m00']
         moment_df['a'] = moment_df['m20']/moment_df['m00']-moment_df['x_mom']**2
@@ -200,11 +199,12 @@ def main():
         moment_df['area_x_eccen'] = moment_df['seg_area'] * moment_df['eccentricity']
         print("Done calculating moments")
 
-        #Reorders columns nicely and drops irrelevant info
+        # Reorders columns and drops unnecesary info
         full_df = moment_df.reindex(['frame', 'x_pos', 'y_pos', 'v_x', 'v_y', 'v_mag', 'seg_area', 'm00', 'x_mom', 'y_mom', 'aspect_w/l','eccentricity', 'elongation', 'circularity', 'rectangular'], axis = 'columns')
         print('Done reordering columns')
 
-        #Write dataframe to csv
+        # THIS PATH MAY NEED TO BE EDITED BY EXTERNAL USERS
+        # Write dataframe to csv 
         full_df.to_csv(filename.replace("code/","") + '_moments_table1_circrect.csv', index = False)
         print('Done: exported video analysis to csv')
 
