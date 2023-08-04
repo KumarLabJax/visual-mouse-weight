@@ -12,7 +12,7 @@
 3. Run `MasterPixelAnalysis.sh`. This is intended to be run with a batch file, a list of return-delimited video file names saved as a `.txt`. This shell script runs the python file `master_pixel_analysis.py` *for each video*, which performs the pixel counting, calculates the contours, moments, and metrics, compiles it into a dataframe, and exports it to `.csv`. The csv is a set of time series where the sample rate is 1 frame, i.e. as fast as possible. Note that `master_pixel_analysis.py` runs once for each video, so there is now a csv file for each video. If you just have one video, you could just run `master_pixel_analysis.py` instead of the `.sh` form.
 
 4. Run `video_summarizer.py`. This file compresses each video's individual time series into medians and appends them to the corresponding row of the strain survey metadata file, `StrainSurveyMetaList_2019-04-09.tsv`. External users should replace this file with their own video metadata.
-   1. **IMPORTANT:** See singularity note below, it is not possible to just run any of the python files alone, they must be run inside of the UPenn Singularity Container. 
+   1. **IMPORTANT:** See singularity note below, it is not guaranteed that this pipeline will work outside the UPenn Singularity Container. 
 #
 **Arena Normalization:** At this point, we can use our basic statistical models, as we have all the information except corner position. To make the conversion from pixel area $A_{px}$ to unit converted area $A_{cm}, we need to do the following:
 - Run the corner detection network adapted from HRNet, methods specified in *Sheppard, et al. Stride-level analysis of mouse open field behavior using deep-learning-based pose estimation. Cell Reports, 2022*. This network outputs `.yaml` files identifying the coordinates of the corners.
@@ -33,13 +33,7 @@ To add **Relative Standard Deviation (RSD)** data, run `RSD_analysis.py`. This o
 
 ## Notes
 ### Singularity:
-- As mentioned above, any of the standalone python files must be run inside of the singularity container `UPennInferImg.simg`.
-- To enter you must already be in an interactive session (or be performing a standalone job submit as in the `.sh` files)
-- At least one place the container is located is `/projects/kumar-lab/guzmam/environment/UPennInferImg.simg`
-- To enter the container, run the next two lines one after the other in an interactive session (on sumner or winter):
-  - $ module load singularity
-  - $ singularity shell "container path"
-- You can then run whatever you like (so long as its packages are contained in the container).
+- As mentioned above, the standalone python files must be run inside of the singularity container `UPennInferImg.simg`. 
 
 ### Length of Videos (55 min)
 - Most videos in our dataset are 1-2 hours long. However, they come from  assays which involve adding things into the open field that lowers the quality of the segmentation mask.
