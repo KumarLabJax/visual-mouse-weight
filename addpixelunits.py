@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
 """
-Parsing corner coords
-Collects/analyzes/adds pre-existing corner information and appends to survey
+@author: Malachy Guzman
 
-Slightly modified from Brian Geuther's addpixelunits.py
+This file collects/analyzes/adds pre-existing corner information and appends to survey.
+It's required that corner detection has already been run, 
+
+IMPORTANT: Filepaths may need to be edited to work for external users.
 """
 
 import argparse
@@ -37,6 +39,7 @@ def main():
     print("\n")
 
     # Load survey dataframe to append corner conversions to
+    # THIS PATH WILL NEED TO BE EDITED BY EXTERNAL USERS
     survey_path = "../../fullSurvey/code/fullsurvey_momentmedians.csv"
     survey_df = pd.read_csv(survey_path)
 
@@ -107,7 +110,6 @@ def main():
 
     merged_data.to_csv("survey_with_corners.csv")
     print("\nSaved merged data as 'survey_with_corners.csv'\n")
-
 
 
 
