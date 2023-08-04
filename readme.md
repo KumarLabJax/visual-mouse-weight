@@ -27,8 +27,8 @@ To add **Relative Standard Deviation (RSD)** data, run `RSD_analysis.py`. This o
 1. The file `final_modeling.R` handles all of the stats and modeling. This code takes the strain survey with moments data, the RSD data, and the individual moments data. 
 2. Figure data:
    1. Individual video moment data is used in fig 1b
-   2. RSD data is used in fig 2
-   3. the full strain survey moments data is used for figs 3 and 4.
+   2. RSD data is used in fig 2 and the supplement.
+   3. The full strain survey moments data is used for figs 3 and 4 and the supplement.
 
 
 ## Notes
