@@ -14,7 +14,7 @@
 4. Run `video_summarizer.py`. This file compresses each video's individual time series into medians and appends them to the corresponding row of the strain survey metadata file, `StrainSurveyMetaList_2019-04-09.tsv`. External users should replace this file with their own video metadata.
    1. **IMPORTANT:** See singularity note below, it is not guaranteed that this pipeline will work outside the Tracking Singularity Container. 
 #
-**Arena Normalization:** At this point, we can use our basic statistical models, as we have all the information except corner position. To make the conversion from pixel area $A_{px}$ to unit converted area $A_{cm}, we need to do the following:
+**Arena Normalization:** At this point, we can use our basic statistical models, as we have all the information except corner position. To make the conversion from pixel area $A_{px}$ to unit converted area $A_{cm}$, we need to do the following:
 - Run the corner detection network adapted from HRNet, methods specified in *Sheppard, et al. Stride-level analysis of mouse open field behavior using deep-learning-based pose estimation. Cell Reports, 2022*. This network outputs `.yaml` files identifying the coordinates of the corners.
   
 - To add corner normalization, run `addpixelunits.py`. This requires that the corner detection network has already been run, and that the `.yaml` files containing the corner data exist. In this final iteration, the moments csv is referred to as `survey_with_corners.csv` (see notes for more detail).
