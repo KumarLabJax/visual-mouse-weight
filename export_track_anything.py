@@ -8,8 +8,25 @@ import cv2
 import typing
 
 
+def morph_filter_mask(mask: np.ndarray, kernel_size: int = 15, count: int = 1) -> np.ndarray:
+    """Applies morphological filtering to a mask.
+
+    Args:
+        mask: boolean image
+        kernel_size: kernel size for filters
+        count: number of dilation-erosion chains to run
+
+    Returns:
+        mask after applying the morphological filtering
+    """
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size)).astype(np.uint8)
+    new_mask = cv2.erode(mask.astype(np.uint8), kernel, iterations=count)
+    new_mask = cv2.dilate(new_mask, kernel, iterations=count)
+    return new_mask
+
+
 def annotate_video(video: Path, animals: typing.Dict = {}, mask_folder: typing.Optional[Path] = None) -> pd.DataFrame:
-    """ Renders a video interactively to annotate the frames where masks are valid.
+    """Renders a video interactively to annotate the frames where masks are valid.
 
     Args:
         video: filename of the video to render
@@ -40,13 +57,18 @@ def annotate_video(video: Path, animals: typing.Dict = {}, mask_folder: typing.O
                 available_ids = available_ids[available_ids != 0]
                 for cur_id in available_ids:
                     centroid = np.mean(np.argwhere(mask == cur_id), axis=0).astype(np.int64)[::-1]
+                    # plot the morphologically filtered contour
+                    new_mask = morph_filter_mask(mask == cur_id)
+                    contours, _ = cv2.findContours(new_mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+                    frame = cv2.drawContours(frame, contours, -1, (0, 255, 0), 3)
+                    # plot the identity over the centroid
                     frame = cv2.putText(frame, str(cur_id), centroid, cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
         cv2.imshow(str(video), frame)
         key = cv2.waitKey(0)
         if key == ord('q'):
             break
         elif key == ord('p'):
-            print(f"Animals annotated:")
+            print("Animals annotated:")
             for key, val in animals.items():
                 print(f"{key} -> {val}")
             continue
@@ -80,12 +102,12 @@ def annotate_video(video: Path, animals: typing.Dict = {}, mask_folder: typing.O
                 elif mod_key == ord('q'):
                     continue
                 else:
-                    print(f"Option -> s: start, e: end, q: quit selection.")
+                    print("Option -> s: start, e: end, q: quit selection.")
             except ValueError:
                 try:
-                    print(f"Key {chr(key)} not found.")
+                    print(f"Key {chr(key)} not found.\nl,j for seeking +/-1\ni,k for seeking +/-10\np to print annotations\nnumbers to select animal\nq to quit")
                 except:
-                    print("Key not registered...")
+                    print("Error not detecting key character (no special keys allowed)...")
     cv2.destroyAllWindows()
     vid_reader.release()
     # Exporting the data
@@ -155,7 +177,7 @@ if annotate_any_videos:
 ###########################################################
 
 def calculate_summary_df(video: Path, animal: int, mask_folder: Path, start: int, end: int) -> pd.DataFrame:
-    """ Extracts frame-wise summaries for an individual animal based on track anything predictions.
+    """Extracts frame-wise summaries for an individual animal based on track anything predictions.
 
     Args:
         video: filename of the video to read
@@ -172,7 +194,7 @@ def calculate_summary_df(video: Path, animal: int, mask_folder: Path, start: int
         frame_file = mask_folder / Path(os.path.splitext(os.path.basename(video))[0]) / Path(f"{int(cur_frame):05d}.npy")
         if os.path.exists(frame_file):
             mask = np.load(str(frame_file))
-            mask = mask == animal
+            mask = morph_filter_mask(mask == animal)
             moments = cv2.moments(mask.astype(np.uint8))
             try:
                 contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
