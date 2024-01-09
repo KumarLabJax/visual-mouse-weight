@@ -22,6 +22,11 @@ def morph_filter_mask(mask: np.ndarray, kernel_size: int = 15, count: int = 1) -
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size)).astype(np.uint8)
     new_mask = cv2.erode(mask.astype(np.uint8), kernel, iterations=count)
     new_mask = cv2.dilate(new_mask, kernel, iterations=count)
+    # Due to differences in the segmentation model, we also add a border.
+    # SAM predicts the edge
+    # Segmentation network predictions on in the training predict around the mouse
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)).astype(np.uint8)
+    new_mask = cv2.dilate(new_mask, kernel, iterations=2)
     return new_mask
 
 
