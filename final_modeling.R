@@ -15,12 +15,14 @@ library(lubridate)
 library(reshape2)
 library(data.table)
 library(dplyr)
-# library(egg)
 library(glmnet)
 library(AICcmodavg)
 library(lmtest)
 library(ggpmisc)
-
+library(tidypredict)
+library(yaml)
+library(miscTools)
+library(pals)
 
 
 
@@ -35,23 +37,68 @@ data <- data %>%
   filter(!is.infinite(elongation))
 
 data <- data %>% 
-    filter(area>300)
+  filter(area>300)
 
 #Add age to data, remove NA ages
 data$Age = data$TestDate - data$DOB
 data <- filter(data, !is.na(Age))
 
-############################################################### 
+strains <- unique(data$Strain)
+countdf <- data.frame()
 
 
-##################### Models on full data and statistic tests ##################### 
 
-### Models including box
-base_model <- lm(Weight~area + Box, data = data)
-norm_model <- lm(Weight~`norm area` + Box, data = data)
-ecc_model <- lm(Weight~norm_eccen_area + Box, data = data)
-nongen_model <- lm(Weight~norm_eccen_area + Box + Sex + Age, data = data)
-full_model <- lm(Weight~norm_eccen_area +Box + Sex * Strain + Age, data = data)
+################ Age and mass histograms (Fig S1) ################ 
+
+max(data$Age/7)
+
+age_hist <- data %>% 
+  ggplot(mapping = aes(x = Age/7)) +
+  geom_histogram(binwidth = 1, fill = '#05396B')+
+  facet_wrap(vars(Sex))+
+  labs(x="Age (Weeks)", y="Frequency") +
+  # xlim(0,0.8)+
+  # ylim(0,50)+
+  # scale_x_continuous(breaks=c(0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8), limits=c(0,0.8))+
+  # theme(panel.grid.minor = element_blank())+
+  theme_bw(base_size=16)+
+  theme(strip.background = element_blank(), strip.text = element_text(size=16),plot.margin = unit(c(0,0,-0.5,0), 'lines'))+
+  coord_fixed(1/5)
+
+age_hist
+
+min(data$Weight)
+
+mass_hist <- data %>% 
+  ggplot(mapping = aes(x = Weight)) +
+  geom_histogram(binwidth = 0.5, fill = '#05396B')+
+  facet_wrap(vars(Sex))+
+  labs(x="Mass (g)", y="Frequency") +
+  # xlim(0,0.8)+
+  # ylim(0,50)+
+  # scale_x_continuous(breaks=c(0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8), limits=c(0,0.8))+
+  # theme(panel.grid.minor = element_blank())+
+  theme_bw(base_size=16)+
+  theme(strip.background = element_blank(), strip.text = element_blank(),plot.margin = unit(c(-0.5,0,0,0), 'lines'))+
+  coord_fixed(1/2)
+
+mass_hist
+
+ggarrange(age_hist,mass_hist,nrow=2,align="hv")
+
+
+
+
+##################### Models on full data and statistical tests ##################### 
+
+### Models M1-M6 trained on full dataset
+full1 <- lm(Weight~area, data = data)
+full2 <- lm(Weight~`norm area`, data = data)
+full3 <- lm(Weight~`norm area` + Box, data = data)
+full4 <- lm(Weight~norm_eccen_area + Box, data = data)
+full5 <- lm(Weight~norm_eccen_area + Box + Sex + Age, data = data)
+full6 <- lm(Weight~norm_eccen_area + Box + Sex * Strain + Age, data = data)
+
 
 # Residual analysis
 par(mfrow=c(2,2))
@@ -88,8 +135,7 @@ data$id <- 1:nrow(data)
 train <- data %>% group_by(Strain) %>% sample_frac(0.70)
 test  <- dplyr::anti_join(data, train, by = 'id')
 
-
-#Corner training models
+#Corner training models (M1-M6 trained on 70%)
 train1 <- lm(Weight~area, data = train)
 train2 <- lm(Weight~`norm area`, data = train)
 train3 <- lm(Weight~`norm area` + Box, data = train)
@@ -128,7 +174,7 @@ M1_train_plot <- test %>%
   ylim(7,48) +
   xlim(7,48) +
   theme_bw(base_size = 12)
-  
+
 M6_train_plot <- test %>% 
   ggplot(mapping = aes(x = Weight, y = ypred_M6)) +
   geom_point(color = '#009ED0', alpha = 0.5, size=1.5)+
@@ -147,7 +193,7 @@ M6_train_plot <- test %>%
 ggarrange(M1_train_plot,M6_train_plot)
 
 
-########################  Sex split fig (4a)
+########################  Sex split fig (4a) ########################  
 testF <- filter(test, Sex == "F")
 testM <- filter(test, Sex == "M")
 
@@ -206,50 +252,19 @@ sex_plot
 
 
 
-#faceted sex split plot, faceting drops the M rmse,mae
-# train_plotF <- testF %>% 
-#   ggplot(mapping = aes(x = Weight, y = ypredF)) +
-#   geom_point(color = '#009ED0', alpha = 0.6, size=2.2)+
-#   geom_abline(intercept = 0, slope = 1, size = 1.5, color='#05396B')+
-#   stat_regline_equation(label.x=11, label.y = 45, size = 5, aes(label = ..rr.label..)) +
-#   annotate("text", x = 11, y = 43, hjust = 0, size = 5, label = plot_mae_F) +
-#   annotate("text", x = 11, y = 41, hjust = 0, size = 5, label = plot_rmse_F) +
-#   annotate("text", x = 11, y = 39, hjust = 0, size = 5, label = plot_mape_F) +
-#   labs(x='True Mass (g)', y='Predicted Mass (g)') +
-#   ggtitle("Females") +
-#   coord_fixed()+
-#   ylim(7,48)+
-#   xlim(7,48)+
-#   theme_bw(base_size = 16)
-# 
-# 
-# train_plotM <- testM %>% 
-#   ggplot(mapping = aes(x = Weight, y = ypredM)) +
-#   geom_point(color = '#009ED0', alpha = 0.6, size=2.2)+
-#   geom_abline(intercept = 0, slope = 1, size = 1.5, color='#05396B')+
-#   stat_regline_equation(label.x=11, label.y = 45, size = 5, aes(label = ..rr.label..)) + 
-#   annotate("text", x = 11, y = 43, hjust = 0, size = 5, label = plot_mae_M) +
-#   annotate("text", x = 11, y = 41, hjust = 0, size = 5, label = plot_rmse_M) +
-#   annotate("text", x = 11, y = 39, hjust = 0, size = 5, label = plot_mape_M) +
-#   labs(x='True Mass (g)', y='') +
-#   ggtitle("Males") +
-#   coord_fixed()+
-#   ylim(7,48)+
-#   xlim(7,48)+
-#   theme_bw(base_size = 16)
 
-# ggarrange(train_plotF,train_plotM, nrow = 1, ncol = 2)
+########################## Strain-wise Average (Fig 4b, supplement) ##########################
 
-######################################################################### 
+filter(data, Strain=="NU/J")
 
+sw_data <- data
+sw_data$prediction <- as.numeric(predict(full6, sw_data))
+sw_data$Weight
 
+filter(sw_data, Strain=="NU/J")
 
-########################## Strain-wise Average (Fig 4b) ########################## 
+trimmed_obs_preds <- filter(select(sw_data,c(Strain, Weight, prediction)))#, Strain != "NU/J")
 
-test$prediction <- as.numeric(predict(train6, test))
-test$Weight
-
-trimmed_obs_preds <- filter(select(test,c(Strain, Weight, prediction)), Strain != "NU/J")
 
 Obs_mean <- tapply(trimmed_obs_preds$Weight, trimmed_obs_preds$Strain, mean)
 Obs_sd <- tapply(trimmed_obs_preds$Weight, trimmed_obs_preds$Strain, sd)
@@ -259,21 +274,89 @@ Pred_sd <- tapply(trimmed_obs_preds$prediction, trimmed_obs_preds$Strain, sd)
 df_Observed <- data.frame(Strain = names(Obs_mean), Obs_mean = Obs_mean, Obs_sd = Obs_sd)
 df_Predicted <- data.frame(Strain = names(Pred_mean), Pred_mean = Pred_mean, Pred_sd = Pred_sd)
 
-df_Observed
-df_Predicted
-
 mean_var_df <- merge(df_Observed, df_Predicted, by="Strain")
 
-unique(is.na(Obs_sd))
+filter(mean_var_df, Strain=="NU/J")
+
 
 labeled_strains <- c("C57BL/6J","C57BL/6NJ","BALB/cJ","A/J")
 extreme_strains <- c("MSM/MsJ","NZO/HILtJ")
+# 
+# 
+# export_strain_errors <- mean_var_df
+# colnames(export_strain_errors) <- c("obs_mass_mean","obs_mass_sd","pred_mass_mean","pred_mass_sd")
+# write.csv(export_strain_errors, "strainwise_means_SDs_obs_preds.csv")
+
+rsdcolors <- c("#e41a1c", "#009ED0")
 
 
-export_strain_errors <- mean_var_df
-colnames(export_strain_errors) <- c("obs_mass_mean","obs_mass_sd","pred_mass_mean","pred_mass_sd")
-write.csv(export_strain_errors, "strainwise_means_SDs_obs_preds.csv")
-          
+strainwise_errors_boxplot <- mean_var_df %>% 
+  ggplot(aes(x = Strain)) +
+  # geom_line(aes(y = Obs_sd, color = "Observed"), size = 0.5, alpha=1, position = position_dodge(1))+
+  # geom_line(aes(y = Pred_sd, color = "Predicted"), size = 0.5, alpha=1, position = position_dodge(1))+
+  geom_bar(aes(y = Obs_sd, fill = "Observed"), width=0.35, stat = "identity", just=0)+
+  geom_bar(aes(y = Pred_sd, fill = "Predicted"),width=0.35, stat = "identity",just=1)+
+  labs(x="", y='SD (g)', fill="")+
+  theme_bw(base_size=16)+
+  # theme(legend.position = 'none')+
+  # ylim(0.05,0.21)+
+  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5, size=10))
+
+strainwise_errors_boxplot
+
+
+mean_var_df$sd_diff <- mean_var_df$Obs_sd - mean_var_df$Pred_sd
+
+
+errordiff_boxplot <- mean_var_df %>% 
+  ggplot(aes(x = Strain)) +
+  # geom_boxplot(aes(y = sd_diff), size = 0.5, alpha=1, position = position_dodge(1))+
+  geom_bar(aes(y = sd_diff), stat = "identity")+
+  labs(x="", y='Obs SD - Pred SD (g)')+
+  theme_bw(base_size=16)+
+  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5, size=10))
+
+errordiff_boxplot
+
+
+mean_var_df$obs_rsd <- mean_var_df$Obs_sd / mean_var_df$Obs_mean
+mean_var_df$pred_rsd <- mean_var_df$Pred_sd / mean_var_df$Pred_mean
+
+filter(mean_var_df, Strain=="NU/J")
+
+colors <- c("Observed" = "#f40000", "Predicted" = "#78a1bb")
+rsdcolors <- c("#e41a1c", "#009ED0")
+
+
+strainwise_rsd_boxplot <- mean_var_df %>% 
+  ggplot(aes(x = reorder(Strain,obs_rsd)))+
+  geom_bar(aes(y = obs_rsd), fill = '#fb8072', width=0.38, stat = "identity", just=0)+
+  geom_bar(aes(y = pred_rsd), fill = '#009ED0', width=0.38, stat = "identity",just=1)+
+  labs(x="", y='RSD', fill="")+
+  theme_bw(base_size=16)+
+  theme(legend.position = 'right')+
+  theme(axis.text.x = element_text(angle=90, hjust=1, vjust=0.5, size=10))
+
+strainwise_rsd_boxplot
+
+
+rsdscatter <- mean_var_df %>% 
+  ggplot(mapping = aes(x = obs_rsd, y = pred_rsd, color = Strain)) +
+  geom_point(size=2.3) +
+  labs(x='Observed RSD', y='Predicted RSD') +
+  coord_fixed() +
+  ylim(0, 0.3) +
+  xlim(0, 0.3) +
+  geom_abline(intercept = 0, slope = 1, size = 1, color='black')+
+  # geom_smooth(method=lm, se=FALSE, color='black', linewidth=1, fullrange=TRUE)+
+  theme_bw(base_size = 16)
+# theme(legend.position = "none")
+
+rsdscatter
+
+
+
+
 ### Strainwise average 
 strainwise_plot <- mean_var_df %>% 
   ggplot(mapping = aes(x = Obs_mean, y = Pred_mean, color = Strain, label=Strain)) +
@@ -290,14 +373,14 @@ strainwise_plot <- mean_var_df %>%
   theme_bw(base_size = 12)+
   guides(colour = guide_legend(ncol = 5))+
   geom_label_repel(aes(label=ifelse((Strain %in% labeled_strains),as.character(Strain),''), hjust='center', vjust='center'),
-                  box.padding   = 0.5,
-                  point.padding = 0.5,
-                  force = 1,
-                  nudge_y       = 18,
-                  nudge_x = -12,
-                  direction     = "y",
-                  segment.size  = 0.5,
-                  size = 3)+
+                   box.padding   = 0.5,
+                   point.padding = 0.5,
+                   force = 1,
+                   nudge_y       = 18,
+                   nudge_x = -12,
+                   direction     = "y",
+                   segment.size  = 0.5,
+                   size = 3)+
   geom_label_repel(aes(label=ifelse((Strain == "NZO/HILtJ"),as.character(Strain),''), hjust='center', vjust='center'),
                    box.padding   = 0.5,
                    point.padding = 0.5,
@@ -313,7 +396,7 @@ strainwise_plot <- mean_var_df %>%
                    segment.size  = 0.5,
                    size = 3)+
   theme(legend.position="none",
-  panel.grid.minor=element_blank())
+        panel.grid.minor=element_blank())
 
 
 strainwise_plot
@@ -399,14 +482,14 @@ for (iter in 1:niter){
   ypred4 <- as.numeric(predict(train4, test_data))
   ypred5 <- as.numeric(predict(train5, test_data))
   ypred6 <- as.numeric(predict(train6, test_data))
-
+  
   RMSE1[iter] <- round(rmse(test_data$Weight, ypred1),3)
   RMSE2[iter] <- round(rmse(test_data$Weight, ypred2),3)
   RMSE3[iter] <- round(rmse(test_data$Weight, ypred3),3)
   RMSE4[iter] <- round(rmse(test_data$Weight, ypred4),3)
   RMSE5[iter] <- round(rmse(test_data$Weight, ypred5),3)
   RMSE6[iter] <- round(rmse(test_data$Weight, ypred6),3)
-
+  
   MAE1[iter] <- round(mae(test_data$Weight, ypred1),3)
   MAE2[iter] <- round(mae(test_data$Weight, ypred2),3)
   MAE3[iter] <- round(mae(test_data$Weight, ypred3),3)
@@ -420,7 +503,7 @@ for (iter in 1:niter){
   MAPE4[iter] <- round(100*mape(test_data$Weight,ypred4),3)
   MAPE5[iter] <- round(100*mape(test_data$Weight,ypred5),3)
   MAPE6[iter] <- round(100*mape(test_data$Weight,ypred6),3)
-
+  
   R2_1[iter] <- round(cor(test_data$Weight, ypred1)^2,3)
   R2_2[iter] <- round(cor(test_data$Weight, ypred2)^2,3)
   R2_3[iter] <- round(cor(test_data$Weight, ypred3)^2,3)
@@ -457,29 +540,44 @@ tb1_RMSE1 <- rep(0,niter)
 tb1_RMSE2 <- rep(0,niter)
 tb1_RMSE3 <- rep(0,niter)
 tb1_RMSE4 <- rep(0,niter)
-tb1_RMSE5 <- rep(0,niter)
-tb1_RMSE6 <- rep(0,niter)
+# tb1_RMSE5 <- rep(0,niter)
+# tb1_RMSE6 <- rep(0,niter)
 
 tb1_MAE1 <- rep(0,niter)
 tb1_MAE2 <- rep(0,niter)
 tb1_MAE3 <- rep(0,niter)
 tb1_MAE4 <- rep(0,niter)
-tb1_MAE5 <- rep(0,niter)
-tb1_MAE6 <- rep(0,niter)
+# tb1_MAE5 <- rep(0,niter)
+# tb1_MAE6 <- rep(0,niter)
 
 tb1_MAPE1 <- rep(0,niter)
 tb1_MAPE2 <- rep(0,niter)
 tb1_MAPE3 <- rep(0,niter)
 tb1_MAPE4 <- rep(0,niter)
-tb1_MAPE5 <- rep(0,niter)
-tb1_MAPE6 <- rep(0,niter)
+# tb1_MAPE5 <- rep(0,niter)
+# tb1_MAPE6 <- rep(0,niter)
 
 tb1_R2_1 <- rep(0,niter)
 tb1_R2_2 <- rep(0,niter)
 tb1_R2_3 <- rep(0,niter)
 tb1_R2_4 <- rep(0,niter)
-tb1_R2_5 <- rep(0,niter)
-tb1_R2_6 <- rep(0,niter)
+# tb1_R2_5 <- rep(0,niter)
+# tb1_R2_6 <- rep(0,niter)
+
+
+speed_data <- read_csv("data/survey_with_speed_no_corners.csv")
+
+# Filter out infinite elongation and bad areas
+speed_data <- speed_data %>% 
+  filter(!is.infinite(elongation))
+
+speed_data <- speed_data %>% 
+  filter(area>300)
+
+
+full_data <- merge(data, speed_data[ , c("NetworkFilename", "speed")], by="NetworkFilename")
+
+full_data$norm_speed_area <- full_data$`norm area` * full_data$speed
 
 
 #n-fold cross 
@@ -487,71 +585,75 @@ for (iter in 1:niter){
   set.seed(iter)
   
   #create ID column
-  data$id <- 1:nrow(data)
+  full_data$id <- 1:nrow(full_data)
   
   #use 70% of dataset as training set and 30% as test set 
-  train_data <- data %>% group_by(Strain) %>% sample_frac(0.70)
-  test_data  <- dplyr::anti_join(data, train_data, by = join_by('id'))
+  table1_train_data <- full_data %>% group_by(Strain) %>% sample_frac(0.70)
+  table1_test_data  <- dplyr::anti_join(full_data, table1_train_data, by = join_by('id'))
   
-
+  
   #Table 1 metric comparison
-  eccen <- lm(Weight~norm_eccen_area, data = train)
-  aspect <- lm(Weight~norm_aspect_area, data = train)
-  elong <- lm(Weight~norm_elong_area, data = train)
-  eccen_box <- lm(Weight~norm_eccen_area + Box, data = train)
-  aspect_box <- lm(Weight~norm_aspect_area + Box, data = train)
-  elong_box <- lm(Weight~norm_elong_area + Box, data = train)
-
+  eccen <- lm(Weight~norm_eccen_area, data = table1_train_data)
+  aspect <- lm(Weight~norm_aspect_area, data = table1_train_data)
+  elong <- lm(Weight~norm_elong_area, data = table1_train_data)
+  velocity <- lm(Weight~norm_speed_area, data = table1_train_data)
+  
+  # eccen_box <- lm(Weight~norm_eccen_area + Box, data = train)
+  # aspect_box <- lm(Weight~norm_aspect_area + Box, data = train)
+  # elong_box <- lm(Weight~norm_elong_area + Box, data = train)
+  
   #Table 1 predictions
-  ypred_eccen <- as.numeric(predict(eccen, test_data))
-  ypred_aspect <- as.numeric(predict(aspect, test_data))
-  ypred_elong <- as.numeric(predict(elong, test_data))
-  ypred_eccen_box <- as.numeric(predict(eccen_box, test_data))
-  ypred_aspect_box <- as.numeric(predict(aspect_box, test_data))
-  ypred_elong_box <- as.numeric(predict(elong_box, test_data))
+  ypred_eccen <- as.numeric(predict(eccen, table1_test_data))
+  ypred_aspect <- as.numeric(predict(aspect, table1_test_data))
+  ypred_elong <- as.numeric(predict(elong, table1_test_data))
+  ypred_speed <- as.numeric(predict(velocity, table1_test_data))
   
-  tb1_RMSE1[iter] <- round(rmse(test_data$Weight, ypred_eccen),3)
-  tb1_RMSE2[iter] <- round(rmse(test_data$Weight, ypred_aspect),3)
-  tb1_RMSE3[iter] <- round(rmse(test_data$Weight, ypred_elong),3)
-  tb1_RMSE4[iter] <- round(rmse(test_data$Weight, ypred_eccen_box),3)
-  tb1_RMSE5[iter] <- round(rmse(test_data$Weight, ypred_aspect_box),3)
-  tb1_RMSE6[iter] <- round(rmse(test_data$Weight, ypred_elong_box),3)
+  # ypred_eccen_box <- as.numeric(predict(eccen_box, test_data))
+  # ypred_aspect_box <- as.numeric(predict(aspect_box, test_data))
+  # ypred_elong_box <- as.numeric(predict(elong_box, test_data))
   
-  tb1_MAE1[iter] <- round(mae(test_data$Weight, ypred_eccen),3)
-  tb1_MAE2[iter] <- round(mae(test_data$Weight, ypred_aspect),3)
-  tb1_MAE3[iter] <- round(mae(test_data$Weight, ypred_elong),3)
-  tb1_MAE4[iter] <- round(mae(test_data$Weight, ypred_eccen_box),3)
-  tb1_MAE5[iter] <- round(mae(test_data$Weight, ypred_aspect_box),3)
-  tb1_MAE6[iter] <- round(mae(test_data$Weight, ypred_elong_box),3)
+  tb1_RMSE1[iter] <- round(rmse(table1_test_data$Weight, ypred_eccen),3)
+  tb1_RMSE2[iter] <- round(rmse(table1_test_data$Weight, ypred_aspect),3)
+  tb1_RMSE3[iter] <- round(rmse(table1_test_data$Weight, ypred_elong),3)
+  tb1_RMSE4[iter] <- round(rmse(table1_test_data$Weight, ypred_speed),3)
+  # tb1_RMSE5[iter] <- round(rmse(test_data$Weight, ypred_aspect_box),3)
+  # tb1_RMSE6[iter] <- round(rmse(test_data$Weight, ypred_elong_box),3)
   
-  tb1_MAPE1[iter] <- round(100*mape(test_data$Weight,ypred_eccen),3)
-  tb1_MAPE2[iter] <- round(100*mape(test_data$Weight,ypred_aspect),3)
-  tb1_MAPE3[iter] <- round(100*mape(test_data$Weight,ypred_elong),3)
-  tb1_MAPE4[iter] <- round(100*mape(test_data$Weight,ypred_eccen_box),3)
-  tb1_MAPE5[iter] <- round(100*mape(test_data$Weight,ypred_aspect_box),3)
-  tb1_MAPE6[iter] <- round(100*mape(test_data$Weight,ypred_elong_box),3)
+  tb1_MAE1[iter] <- round(mae(table1_test_data$Weight, ypred_eccen),3)
+  tb1_MAE2[iter] <- round(mae(table1_test_data$Weight, ypred_aspect),3)
+  tb1_MAE3[iter] <- round(mae(table1_test_data$Weight, ypred_elong),3)
+  tb1_MAE4[iter] <- round(mae(table1_test_data$Weight, ypred_speed),3)
+  # tb1_MAE5[iter] <- round(mae(test_data$Weight, ypred_aspect_box),3)
+  # tb1_MAE6[iter] <- round(mae(test_data$Weight, ypred_elong_box),3)
   
-  tb1_R2_1[iter] <- round(cor(test_data$Weight, ypred_eccen)^2,3)
-  tb1_R2_2[iter] <- round(cor(test_data$Weight, ypred_aspect)^2,3)
-  tb1_R2_3[iter] <- round(cor(test_data$Weight, ypred_elong)^2,3)
-  tb1_R2_4[iter] <- round(cor(test_data$Weight, ypred_eccen_box)^2,3)
-  tb1_R2_5[iter] <- round(cor(test_data$Weight, ypred_aspect_box)^2,3)
-  tb1_R2_6[iter] <- round(cor(test_data$Weight, ypred_elong_box)^2,3)
+  tb1_MAPE1[iter] <- round(100*mape(table1_test_data$Weight,ypred_eccen),3)
+  tb1_MAPE2[iter] <- round(100*mape(table1_test_data$Weight,ypred_aspect),3)
+  tb1_MAPE3[iter] <- round(100*mape(table1_test_data$Weight,ypred_elong),3)
+  tb1_MAPE4[iter] <- round(100*mape(table1_test_data$Weight,ypred_speed),3)
+  # tb1_MAPE5[iter] <- round(100*mape(test_data$Weight,ypred_aspect_box),3)
+  # tb1_MAPE6[iter] <- round(100*mape(test_data$Weight,ypred_elong_box),3)
+  
+  tb1_R2_1[iter] <- round(cor(table1_test_data$Weight, ypred_eccen)^2,3)
+  tb1_R2_2[iter] <- round(cor(table1_test_data$Weight, ypred_aspect)^2,3)
+  tb1_R2_3[iter] <- round(cor(table1_test_data$Weight, ypred_elong)^2,3)
+  tb1_R2_4[iter] <- round(cor(table1_test_data$Weight, ypred_speed)^2,3)
+  # tb1_R2_5[iter] <- round(cor(test_data$Weight, ypred_aspect_box)^2,3)
+  # tb1_R2_6[iter] <- round(cor(test_data$Weight, ypred_elong_box)^2,3)
 }
 
 
-tb1_all_RMSE <- c(mean(tb1_RMSE1), mean(tb1_RMSE2), mean(tb1_RMSE3), mean(tb1_RMSE4), mean(tb1_RMSE5), mean(tb1_RMSE6))
-tb1_all_MAE <- c(mean(tb1_MAE1), mean(tb1_MAE2), mean(tb1_MAE3), mean(tb1_MAE4), mean(tb1_MAE5), mean(tb1_MAE6))
-tb1_all_MAPE <- c(mean(tb1_MAPE1), mean(tb1_MAPE2), mean(tb1_MAPE3), mean(tb1_MAPE4), mean(tb1_MAPE5), mean(tb1_MAPE6))
-tb1_all_R2 <- c(mean(tb1_R2_1), mean(tb1_R2_2), mean(tb1_R2_3),mean(tb1_R2_4), mean(tb1_R2_5), mean(tb1_R2_6))
+tb1_all_RMSE <- c(mean(tb1_RMSE1), mean(tb1_RMSE2), mean(tb1_RMSE3), mean(tb1_RMSE4))#, mean(tb1_RMSE5), mean(tb1_RMSE6))
+tb1_all_MAE <- c(mean(tb1_MAE1), mean(tb1_MAE2), mean(tb1_MAE3), mean(tb1_MAE4))#, mean(tb1_MAE5), mean(tb1_MAE6))
+tb1_all_MAPE <- c(mean(tb1_MAPE1), mean(tb1_MAPE2), mean(tb1_MAPE3), mean(tb1_MAPE4))#, mean(tb1_MAPE5), mean(tb1_MAPE6))
+tb1_all_R2 <- c(mean(tb1_R2_1), mean(tb1_R2_2), mean(tb1_R2_3),mean(tb1_R2_4))#, mean(tb1_R2_5), mean(tb1_R2_6))
 
-tb1_RMSE_sd <- round(c(sd(tb1_RMSE1), sd(tb1_RMSE2), sd(tb1_RMSE3), sd(tb1_RMSE4), sd(tb1_RMSE5), sd(tb1_RMSE6)),3)
-tb1_MAE_sd <- round(c(sd(tb1_MAE1), sd(tb1_MAE2), sd(tb1_MAE3), sd(tb1_MAE4), sd(tb1_MAE5), sd(tb1_MAE6)),3)
-tb1_MAPE_sd <- round(c(sd(tb1_MAPE1), sd(tb1_MAPE2), sd(tb1_MAPE3), sd(tb1_MAPE4), sd(tb1_MAPE5), sd(tb1_MAPE6)),3)
-tb1_R2_sd <- round(c(sd(tb1_R2_1), sd(tb1_R2_2), sd(tb1_R2_3), sd(tb1_R2_4), sd(tb1_R2_5), sd(tb1_R2_6)),3)
+tb1_RMSE_sd <- round(c(sd(tb1_RMSE1), sd(tb1_RMSE2), sd(tb1_RMSE3), sd(tb1_RMSE4)),3)#, sd(tb1_RMSE5), sd(tb1_RMSE6)),3)
+tb1_MAE_sd <- round(c(sd(tb1_MAE1), sd(tb1_MAE2), sd(tb1_MAE3), sd(tb1_MAE4)),3)#, sd(tb1_MAE5), sd(tb1_MAE6)),3)
+tb1_MAPE_sd <- round(c(sd(tb1_MAPE1), sd(tb1_MAPE2), sd(tb1_MAPE3), sd(tb1_MAPE4)),3)#, sd(tb1_MAPE5), sd(tb1_MAPE6)),3)
+tb1_R2_sd <- round(c(sd(tb1_R2_1), sd(tb1_R2_2), sd(tb1_R2_3), sd(tb1_R2_4)),3)#, sd(tb1_R2_5), sd(tb1_R2_6)),3)
 
 
-k=6
+k=4
 str_c(tb1_all_RMSE[k]," ± ",tb1_RMSE_sd[k]," & ",tb1_all_MAE[k]," ± ",tb1_MAE_sd[k]," & ",
       tb1_all_MAPE[k]," ± ",tb1_MAPE_sd[k]," & ",tb1_all_R2[k]," ± ",tb1_R2_sd[k])
 
@@ -599,35 +701,10 @@ ggarrange(M1_train_plot, M6_train_plot, MAE_boxplot, R2_boxplot,
           font.label=list(size = 18, color = "black", face="bold"))
 
 
-# MAE_violin <- clean_MAE_df %>% 
-#   ggplot(mapping = aes(x = model, y = mae)) +
-#   geom_violin(fill='#05396B')+
-#   # geom_jitter(color = '#009ED0',width=0.2,alpha=0.5)+
-#   # geom_point(color = '#009ED0', alpha = 0.6, size=2.2)+
-#   # geom_abline(intercept = 0, slope = 1, size = 1.5, color='#05396B')+
-#   labs(x="", y='Mean Average Error (MAE) (g)') +
-#   # ggtitle("Full Model") +
-#   theme_bw()
-# 
-# MAE_violin
-# 
-# 
-# R2_violin <- clean_R2_df %>% 
-#   ggplot(mapping = aes(x = model, y = r2)) +
-#   geom_violin(fill='#05396B')+
-#   # geom_jitter(color = '#009ED0',width=0.2,alpha=0.5)+
-#   # geom_point(color = '#009ED0', alpha = 0.6, size=2.2)+
-#   # geom_abline(intercept = 0, slope = 1, size = 1.5, color='#05396B')+
-#   labs(x="", y='R^2') +
-#   # ggtitle("Full Model") +
-#   theme_bw()
-# 
-# R2_violin
+
+#################################################### 
 
 
-########################## End of Box-plots for model comparison ########################## 
-
-  
 
 
 
@@ -636,15 +713,6 @@ b6j_framedata <- filter(read_csv("data/1b_moments_data/LL1-1_C57BL6J.avi_moments
 b6n_framedata <- filter(read_csv("data/1b_moments_data/LL3-1_B6N_M.avi_moments.csv"), seg_area > 300)
 aj_framedata <- filter(read_csv("data/1b_moments_data/LL1-4_AJ_M.avi_moments.csv"), seg_area > 300)
 balb_framedata <- filter(read_csv("data/1b_moments_data/LL1-3_000651-M-MP16-9-42395-3-S009.avi_moments.csv"), seg_area > 300)
-
-
-# # takes a df as x
-# framestat <- function(x) { 
-#   fd_mean <- mean(x$seg_area)
-#   x$area_deviance <- x$seg_area - fd_mean
-#   x$area_percentdev <- 100*x$area_deviance / fd_mean
-#   return (x)
-# }
 
 framerate <- 30
 
@@ -826,6 +894,296 @@ rsd_boxplot
 
 
 
+##################### REBUTTAL CODE - Fig 6 Multimouse home cage experiments ##################### 
+
+# unfiltered path
+# vid_path = "data/rebuttal/weight/"
+
+#filtered path
+vid_path = "data/rebuttal/weights_morphfiltered_and_expanded/"
+
+#Requires home cage data as described in paper
+notouch_mouse1_filenames = list(
+  paste(vid_path,"mouse1/1_MDX0063_2019-10-12_03-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse1/1_MDX0063_2019-10-11_23-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse1/1_MDX0063_2019-10-12_00-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse1/1_MDX0063_2019-10-11_22-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse1/1_MDX0063_2019-10-11_19-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse1/1_MDX0063_2019-10-11_15-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse1/1_MDX0063_2019-10-11_12-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse1/1_MDX0063_2019-10-11_09-00-00_moments_table1_circrect.csv",sep=""))
+
+notouch_mouse2_filenames = list(
+  paste(vid_path,"mouse2/2_MDX0063_2019-10-12_03-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse2/2_MDX0063_2019-10-11_23-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse2/2_MDX0063_2019-10-12_00-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse2/2_MDX0063_2019-10-11_22-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse2/2_MDX0063_2019-10-11_19-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse2/2_MDX0063_2019-10-11_15-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse2/2_MDX0063_2019-10-11_12-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse2/2_MDX0063_2019-10-11_09-00-00_moments_table1_circrect.csv",sep=""))
+
+notouch_mouse3_filenames = list(
+  paste(vid_path,"mouse3/3_MDX0063_2019-10-12_03-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse3/3_MDX0063_2019-10-11_23-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse3/3_MDX0063_2019-10-12_00-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse3/3_MDX0063_2019-10-11_22-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse3/3_MDX0063_2019-10-11_19-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse3/3_MDX0063_2019-10-11_15-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse3/3_MDX0063_2019-10-11_12-00-00_moments_table1_circrect.csv",sep=""),
+  paste(vid_path,"mouse3/3_MDX0063_2019-10-11_09-00-00_moments_table1_circrect.csv",sep=""))
+
+
+mouse1_vids_raw <- lapply(notouch_mouse1_filenames, read_csv)
+mouse2_vids_raw <- lapply(notouch_mouse2_filenames, read_csv)
+mouse3_vids_raw <- lapply(notouch_mouse3_filenames, read_csv)
+
+## Setting up conversion cm to px. Remember these videos are at 800x800 instead of 480x480 so px area won't work
+cm_per_px_conversion_factor <- 0.08851678708
+masses <- read_csv("data/rebuttal/BodyWeight.csv")
+
+# Fixing a problem where read_csv reads sex F as a logical 
+notlogical<-cols(sex=col_character())
+metadata <- as.data.frame(lapply("data/rebuttal/JCMS_Metadata.csv", read_csv, col_types=notlogical))
+
+
+# function to clean up and add metadata to vid 
+clean_mouse_vid_rebuttal <- function(file,mouse_id){
+  file <- file %>% 
+    filter(!is.infinite(elongation))
+  file <- file %>% 
+    filter(seg_area>300)
+  file <- file %>% 
+    select(frame, seg_area, eccentricity)
+  
+  file$`norm area` <- file$seg_area * cm_per_px_conversion_factor^2
+  file$norm_eccen_area <- file$`norm area` * file$eccentricity
+  
+  ## Adding metadata (using start weight as observed weight)
+  file$Sex <- metadata$sex[1]
+  file$Age <- (metadata$exitDate - metadata$birthDate)[1]
+  file$Strain <- metadata$Strain[1]
+  file$mouseid <- mouse_id
+  # file$vid_id <- vid_id
+  file$Box <-"LL1-3"
+  file$Weight <- masses$`Start Weight`[1]
+  colnames(file)[2] <- c("area")
+  
+  # Adding framewise mass predictions
+  file$pred_weight_m2 <-  as.numeric(predict(full2, file))
+  file$pred_weight_m3 <-  as.numeric(predict(full3, file))
+  file$pred_weight_m4 <-  as.numeric(predict(full4, file))
+  file$pred_weight_m5 <-  as.numeric(predict(full5, file))
+  file$pred_weight_m6 <-  as.numeric(predict(full6, file))
+  
+  #counter for vid num
+  # vid_id = vid_id + 1
+  return(file)
+}
+
+### Cleaning all vids
+mouse1_vids_cleaned <- lapply(mouse1_vids_raw, clean_mouse_vid_rebuttal, mouse_id="1")
+mouse2_vids_cleaned <- lapply(mouse2_vids_raw, clean_mouse_vid_rebuttal, mouse_id="2")
+mouse3_vids_cleaned <- lapply(mouse3_vids_raw, clean_mouse_vid_rebuttal, mouse_id="3")
+
+
+mouse1_concat_medians <- tibble()
+mouse2_concat_medians <- tibble()
+mouse3_concat_medians <- tibble()
+
+concat_mouse1_cleanvids_framewise <- tibble()
+concat_mouse2_cleanvids_framewise <- tibble()
+concat_mouse3_cleanvids_framewise <- tibble()
+
+mouse1_vidmedians <- list()
+mouse2_vidmedians <- list()
+mouse3_vidmedians <- list()
+
+weirdmedian <- function(file){
+  tmp <- select(file,!c(frame,Sex,Age,Strain,mouseid,Box,vid_id))
+  tmp_inverse <- head(select(file,c(Sex,Age,Strain,mouseid,Box,vid_id)),1)
+  return(as_tibble(cbind(lapply(tmp, median), tmp_inverse)))
+}
+
+
+for (i in 1:length(mouse1_vids_cleaned)){
+  mouse1_vids_cleaned[[i]]$vid_id <- as.factor(i)
+  mouse1_vidmedians[[i]] <- weirdmedian(mouse1_vids_cleaned[[i]])
+  mouse1_concat_medians <- rbind(mouse1_concat_medians, mouse1_vidmedians[[i]])
+  concat_mouse1_cleanvids_framewise <- rbind(concat_mouse1_cleanvids_framewise, mouse1_vids_cleaned[[i]])
+}
+for (i in 1:length(mouse2_vids_cleaned)){
+  mouse2_vids_cleaned[[i]]$vid_id <- as.factor(i)
+  mouse2_vidmedians[[i]] <- weirdmedian(mouse2_vids_cleaned[[i]])
+  mouse2_concat_medians <- rbind(mouse2_concat_medians, mouse2_vidmedians[[i]])
+  concat_mouse2_cleanvids_framewise <- rbind(concat_mouse2_cleanvids_framewise, mouse2_vids_cleaned[[i]])
+}
+for (i in 1:length(mouse3_vids_cleaned)){
+  mouse3_vids_cleaned[[i]]$vid_id <- as.factor(i)
+  mouse3_vidmedians[[i]] <- weirdmedian(mouse3_vids_cleaned[[i]])
+  mouse3_concat_medians <- rbind(mouse3_concat_medians, mouse3_vidmedians[[i]])
+  concat_mouse3_cleanvids_framewise <- rbind(concat_mouse3_cleanvids_framewise, mouse3_vids_cleaned[[i]])
+}
+
+
+mouse1_concat_medians$relweightdiffm2 <- abs(mouse1_concat_medians$pred_weight_m2-mouse1_concat_medians$Weight)/mouse1_concat_medians$Weight
+mouse1_concat_medians$relweightdiffm3 <- abs(mouse1_concat_medians$pred_weight_m3-mouse1_concat_medians$Weight)/mouse1_concat_medians$Weight
+mouse1_concat_medians$relweightdiffm4 <- abs(mouse1_concat_medians$pred_weight_m4-mouse1_concat_medians$Weight)/mouse1_concat_medians$Weight
+mouse1_concat_medians$relweightdiffm5 <- abs(mouse1_concat_medians$pred_weight_m5-mouse1_concat_medians$Weight)/mouse1_concat_medians$Weight
+mouse1_concat_medians$relweightdiffm6 <- abs(mouse1_concat_medians$pred_weight_m6-mouse1_concat_medians$Weight)/mouse1_concat_medians$Weight
+
+mouse2_concat_medians$relweightdiffm2 <- abs(mouse2_concat_medians$pred_weight_m2-mouse2_concat_medians$Weight)/mouse2_concat_medians$Weight
+mouse2_concat_medians$relweightdiffm3 <- abs(mouse2_concat_medians$pred_weight_m3-mouse2_concat_medians$Weight)/mouse2_concat_medians$Weight
+mouse2_concat_medians$relweightdiffm4 <- abs(mouse2_concat_medians$pred_weight_m4-mouse2_concat_medians$Weight)/mouse2_concat_medians$Weight
+mouse2_concat_medians$relweightdiffm5 <- abs(mouse2_concat_medians$pred_weight_m5-mouse2_concat_medians$Weight)/mouse2_concat_medians$Weight
+mouse2_concat_medians$relweightdiffm6 <- abs(mouse2_concat_medians$pred_weight_m6-mouse2_concat_medians$Weight)/mouse2_concat_medians$Weight
+
+mouse3_concat_medians$relweightdiffm2 <- abs(mouse3_concat_medians$pred_weight_m2-mouse3_concat_medians$Weight)/mouse3_concat_medians$Weight
+mouse3_concat_medians$relweightdiffm3 <- abs(mouse3_concat_medians$pred_weight_m3-mouse3_concat_medians$Weight)/mouse3_concat_medians$Weight
+mouse3_concat_medians$relweightdiffm4 <- abs(mouse3_concat_medians$pred_weight_m4-mouse3_concat_medians$Weight)/mouse3_concat_medians$Weight
+mouse3_concat_medians$relweightdiffm5 <- abs(mouse3_concat_medians$pred_weight_m5-mouse3_concat_medians$Weight)/mouse3_concat_medians$Weight
+mouse3_concat_medians$relweightdiffm6 <- abs(mouse3_concat_medians$pred_weight_m6-mouse3_concat_medians$Weight)/mouse3_concat_medians$Weight
+
+
+
+complete_median_allmice <- rbind(rbind(mouse1_concat_medians,mouse2_concat_medians),mouse3_concat_medians)
+pivot_median_allmice <- pivot_longer(complete_median_allmice, cols=starts_with("relweightdiff"), names_to = "modelid", values_to = "relerror")
+
+
+########## Plotting ########## 
+
+composite_pallete <- c("#d7191c","#fdae61","#2c7bb6")
+
+error_boxplot_m6 <- complete_median_allmice %>% 
+  ggplot(mapping = aes(x = mouseid, y = 100*relweightdiffm6)) +
+  geom_boxplot(size=0.7, width=0.7, outlier.shape=NA, aes(color=mouseid))+
+  geom_jitter(width=0, size=2, aes(color=mouseid))+
+  # geom_point(size=2, position = position_jitterdodge(jitter.width = 0.01))+
+  labs(x="",y='MAPE (%)', color="Mouse") +
+  scale_x_discrete(labels=c("Mouse 1", "Mouse 2", "Mouse 3"))+
+  ylim(0,25)+
+  coord_fixed(0.11)+
+  theme_bw(base_size = 16)+
+  theme(panel.grid.minor = element_blank(), legend.position = "none")+
+  scale_color_manual(values = composite_pallete)
+
+error_boxplot_m6
+
+
+# Alt version of fig 6c
+# median(filter(complete_median_allmice,mouseid=="3")$relweightdiffm6)
+# 
+# error_boxplot_allmodels <- pivot_median_allmice %>% 
+#   ggplot(mapping = aes(x = mouseid, y = relerror, color=modelid)) +
+#   geom_boxplot(size=0.7, width=0.8)+
+#   # geom_jitter(width=0, size=2)+
+#   # geom_point(size=2, position = position_jitterdodge(jitter.width = 0.01))+
+#   labs(x="",y='MAPE', color="Model") +
+#   scale_x_discrete(labels=c("Mouse 1", "Mouse 2", "Mouse 3"))+
+#   ylim(0,0.25)+
+#   coord_fixed(11)+
+#   theme_bw(base_size = 16)+
+#   theme(panel.grid.minor = element_blank())+
+#   scale_color_manual(values = pals::stepped3()[c(1,2,3,4,5)+1],labels=c("M2", "M3", "M4","M5","M6"))
+# 
+# error_boxplot_allmodels
+
+
+
+vidlabs <- c("Video 1","Video 2","Video 3","Video 4","Video 5","Video 6","Video 7","Video 8")
+vid_labeller <- function(variable,value){
+  return(vidlabs[value])
+}
+
+mouse1_predplot_everyvid <- concat_mouse1_cleanvids_framewise %>% 
+  ggplot(mapping = aes(x = frame)) +
+  # geom_line(aes(y = pred_weight_m2), color = 'red', size=0.3)+
+  geom_line(aes(y = pred_weight_m6), color = 'red', linewidth=0.6)+
+  # geom_line(aes(y = area), color = 'green', size=0.3)+
+  geom_hline(yintercept = masses$`Start Weight`[1], size = 1, color='black')+
+  # geom_hline(yintercept = (mouse1_compressed$pred_weight_m6[vid_id]), size = 1, color='red')+
+  labs(title = "Mouse 1, M6 framewise prediction (no touch), corrected data", x="Frame", y="Mass (g)")+    
+  facet_wrap(vars(vid_id),ncol=4,scales='free_x',labeller=vid_labeller)+
+  theme_bw(base_size=16)+
+  theme(strip.background = element_blank(),axis.text.x = element_text(angle = 55,vjust=0.75))+
+  scale_x_continuous(n.breaks=15)
+
+
+mouse1_predplot_everyvid
+
+
+mouse2_predplot_everyvid <- concat_mouse2_cleanvids_framewise %>% 
+  ggplot(mapping = aes(x = frame)) +
+  # geom_line(aes(y = pred_weight_m2), color = 'red', size=0.3)+
+  geom_line(aes(y = pred_weight_m6), color = 'red', linewidth=0.6)+
+  # geom_line(aes(y = area), color = 'green', size=0.3)+
+  geom_hline(yintercept = masses$`Start Weight`[2], size = 1, color='black')+
+  # geom_hline(yintercept = (mouse1_compressed$pred_weight_m6[vid_id]), size = 1, color='red')+
+  labs(title = "Mouse 2, M6 framewise prediction (no touch), corrected data", x="Frame", y="Mass (g)")+    
+  facet_wrap(vars(vid_id),ncol=4,scales='free_x',labeller=vid_labeller)+
+  theme_bw(base_size=16)+
+  theme(strip.background = element_blank(),axis.text.x = element_text(angle = 55,vjust=0.75))+
+  scale_x_continuous(n.breaks=15)
+
+
+mouse2_predplot_everyvid
+
+
+mouse3_predplot_everyvid <- concat_mouse3_cleanvids_framewise %>% 
+  ggplot(mapping = aes(x = frame)) +
+  # geom_line(aes(y = pred_weight_m2), color = 'red', size=0.3)+
+  geom_line(aes(y = pred_weight_m6), color = 'red', linewidth=0.6)+
+  # geom_line(aes(y = area), color = 'green', size=0.3)+
+  geom_hline(yintercept = masses$`Start Weight`[3], size = 1, color='black')+
+  # geom_hline(yintercept = (mouse1_compressed$pred_weight_m6[vid_id]), size = 1, color='red')+
+  labs(title = "Mouse 3, M6 framewise prediction (no touch), corrected data", x="Frame", y="Mass (g)")+    
+  facet_wrap(vars(vid_id),ncol=4,scales='free_x',labeller=vid_labeller)+
+  theme_bw(base_size=16)+
+  theme(strip.background = element_blank(),axis.text.x = element_text(angle = 55,vjust=0.75))+
+  scale_x_continuous(n.breaks=15)
+
+
+mouse3_predplot_everyvid
+
+
+
+mouse1_median_mass <- median(concat_mouse1_cleanvids_framewise$pred_weight_m6)
+mouse2_median_mass <- median(concat_mouse2_cleanvids_framewise$pred_weight_m6)
+mouse3_median_mass <- median(concat_mouse3_cleanvids_framewise$pred_weight_m6)
+
+#assuming 30fps
+composite_predplot_everyvid <-  ggplot(mapping = aes(x = frame/30))+
+  geom_hline(yintercept = mouse1_median_mass, size = 0.8, color=composite_pallete[1],linetype="solid")+ #composite_pallete[3])+
+  geom_hline(yintercept = mouse2_median_mass, size = 0.8, color=composite_pallete[2],linetype="solid")+ #composite_pallete[3])+
+  geom_hline(yintercept = mouse3_median_mass, size = 0.8, color=composite_pallete[3],linetype="solid")+ #composite_pallete[3])+
+  geom_line(data=concat_mouse1_cleanvids_framewise, aes(y = pred_weight_m6, color = mouseid), linewidth=0.5)+
+  geom_line(data=concat_mouse2_cleanvids_framewise, aes(y = pred_weight_m6, color = mouseid), linewidth=0.5)+
+  geom_line(data=concat_mouse3_cleanvids_framewise, aes(y = pred_weight_m6, color = mouseid), linewidth=0.5)+
+  geom_hline(yintercept = masses$`Start Weight`[1], size = 0.8, color="black",linetype="dashed")+ #composite_pallete[1])+
+  geom_hline(yintercept = masses$`Start Weight`[2], size = 0.8, color="black",linetype="dashed")+ #composite_pallete[2])+
+  geom_hline(yintercept = masses$`Start Weight`[3], size = 0.8, color="black",linetype="dashed")+ #composite_pallete[3])+  
+  labs(x="Time (s)", y="Observed Mass (g, black), Predicted Mass (g, color)", color="Predicted Mass")+ 
+  # ylim(0,42)+
+  facet_wrap(vars(vid_id),ncol=4,labeller=vid_labeller)+
+  theme_bw(base_size=18)+
+  theme(strip.background = element_blank(),
+        axis.text.x = element_text(size=14,angle = 0,vjust=0.75),
+        strip.text = element_text(size=16,angle = 0,vjust=0.75),
+        panel.grid.minor = element_blank(),
+        panel.grid.major = element_blank(),
+        legend.position="NA")+
+  scale_color_manual(values = composite_pallete,labels=c("Mouse 1", "Mouse 2", "Mouse 3"))+
+  # scale_color_manual(values = pals::kelly()[c(4,6,7)],labels=c("Mouse 1", "Mouse 2", "Mouse 3"))+
+  scale_x_continuous(n.breaks=5) #, labels=scales::label_number(precision = 0))
+
+composite_predplot_everyvid
+
+ggarrange(mouse1_predplot_everyvid,mouse2_predplot_everyvid,mouse3_predplot_everyvid,nrow=3)
+
+
+
+
+
 #################################### Misc stuff, Gautam & Brian code #################################### 
 
 #Model 1
@@ -931,7 +1289,7 @@ ggplot(data = test) +
   ggtitle("Model 10 Test Data")
 
 
- ggplot(data = filter(test, Sex=="F")) +
+ggplot(data = filter(test, Sex=="F")) +
   geom_density(aes(x=Weight, fill='True weight'), alpha=0.5)+
   geom_density(aes(x=ypred_female, fill='Predicted weight'), alpha=0.5)
 
@@ -986,31 +1344,13 @@ accuracyPlot_3 <- test %>%
   stat_regline_equation(label.x=10, label.y = 34, aes(label = ..adj.rr.label..)) +
   annotate("text", x = 12, y = 39, label = plot3_rmse) +
   annotate("text", x = 12, y = 41, label = plot3_mae) 
-  # stat_regline_equation(label.y = 39, aes(label = plot3_mae)) + 
-  # stat_regline_equation(label.y = 40, aes(label = plot3_rmse))
+# stat_regline_equation(label.y = 39, aes(label = plot3_mae)) + 
+# stat_regline_equation(label.y = 40, aes(label = plot3_rmse))
 
 accuracyPlot_3
 
 rmse(test$Weight, ypred_model3)
 mae(test$Weight, ypred_model3)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1122,12 +1462,12 @@ modelplot <- mean_var_df %>%
   labs(x='True Weight (g)', y='Predicted Weight (g)')+
   ggtitle("Strain-wise Average")+
   theme_bw()
-  # theme(legend.position="none")
-  #annotate("text", x = 48, y = 50, angle = 45, label = '45 deg', size = 5)+
-  #stat_regline_equation(label.x=10, label.y = 34, aes(label = ..adj.rr.label..)) +
-  # stat_regline_equation(label.x=10, label.y = 37, aes(label = ..eq.label..)) +
-  # annotate("text", x = 10, y = 39, hjust = 0, label = plot_rmse) +
-  # annotate("text", x = 10, y = 41, hjust = 0, label = plot_mae) 
+# theme(legend.position="none")
+#annotate("text", x = 48, y = 50, angle = 45, label = '45 deg', size = 5)+
+#stat_regline_equation(label.x=10, label.y = 34, aes(label = ..adj.rr.label..)) +
+# stat_regline_equation(label.x=10, label.y = 37, aes(label = ..eq.label..)) +
+# annotate("text", x = 10, y = 39, hjust = 0, label = plot_rmse) +
+# annotate("text", x = 10, y = 41, hjust = 0, label = plot_mae) 
 
 modelplot
 
@@ -1145,14 +1485,3 @@ get_errorbar_df = function(df, col1, col2, group_column='Strain') {
   names(temp_df_sd) = c(group_column, 'xsd', 'ysd')
   merge(temp_df, temp_df_sd, by.x=group_column, by.y=group_column)
 }
-
-
-allow_overlap=FALSE
-temp = get_errorbar_df(test_metrics, 'grooming_duration_secs_0_first_55m_sum', 'grooming_number_bouts_0_first_55m_sum', 'Strain')
-temp$is_wild = temp$Strain %in% wild_strains
-temp = temp[order(temp$is_wild, decreasing=!allow_overlap),]
-pcor1 = ggplot(data=temp, aes(x=x, y=y, xmin=x-xsd, xmax=x+xsd, ymin=y-ysd, ymax=y+ysd, group=Strain, height=ysd/4, width=xsd/4, col=is_wild))+geom_errorbar()+geom_errorbarh()+geom_point()+annotate(geom='text', x=temp$x, y=temp$y+mean(temp$ysd)/2, label=temp$Strain, color=c('#377eb8', '#e41a1c')[as.numeric(temp$is_wild)+1], check_overlap=!allow_overlap)+theme(legend.position='none')+labs(x='Total Grooming',y='Number Bouts')+scale_color_brewer(palette='Set1', direction=-1)
-
-
-
- 
